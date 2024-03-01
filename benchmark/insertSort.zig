@@ -30,8 +30,10 @@ fn welford(comptime T: type, comptime B: BiasMode, Ex: *T, Vx: *T, xn: T, n: usi
     return;
 }
 
+const IsGuarded = enum { guarded, unguarded };
+
 // Sorts [begin, end) using insertion sort in an ascending order.
-fn insertSort1(comptime T: type, bptr: [*]T, eptr: [*]T) void {
+fn insertSort1(comptime T: type, comptime is_guarded: IsGuarded, bptr: [*]T, eptr: [*]T) void {
     if (bptr == eptr) return;
     var cptr: [*]T = bptr + 1; // cptr: current ptr
     while (cptr != eptr) : (cptr += 1) {
@@ -42,10 +44,21 @@ fn insertSort1(comptime T: type, bptr: [*]T, eptr: [*]T) void {
             rptr[0] = lptr[0];
             rptr -= 1;
             lptr -= 1;
-            while (rptr != bptr and tmp < lptr[0]) {
-                rptr[0] = lptr[0];
-                rptr -= 1;
-                lptr -= 1;
+            switch (is_guarded) {
+                .guarded => {
+                    while (rptr != bptr and tmp < lptr[0]) {
+                        rptr[0] = lptr[0];
+                        rptr -= 1;
+                        lptr -= 1;
+                    }
+                },
+                .unguarded => {
+                    while (tmp < lptr[0]) {
+                        rptr[0] = lptr[0];
+                        rptr -= 1;
+                        lptr -= 1;
+                    }
+                },
             }
             rptr[0] = tmp;
         }
@@ -109,28 +122,46 @@ pub fn main() !void {
     const exp: [16]u64 = .{ 1, 1, 2, 4, 5, 5, 5, 6, 7, 8, 8, 10, 13, 14, 15, 13 };
     _ = exp;
 
-    // test "benchmark insertSort1"
-    // [[insertSort1: Use [*]T]]
-    // mean = 58.965181999997874 ns
-    // std  = 128.08589422612658 ns
-    // eval = 1000000
+    // test "benchmark insertSort1 (guarded)"
+    // [[insertSort1: Use [*]T (guarded)]]
+    //   mean = 63.52084699999885 ns
+    //   std  = 300.7708840286964 ns
+    //   eval = 1000000
 
     for (0..itmax) |n| {
         inline for (arr, .{ 15, 7, 8, 1, 4, 6, 1, 2, 13, 5, 5, 14, 8, 5, 10, 13 }) |*ptr, val| ptr.* = val;
         timer.reset();
-        insertSort1(u64, arr.ptr, arr.ptr + 15);
+        insertSort1(u64, .guarded, arr.ptr, arr.ptr + 15);
         timer_read = @floatFromInt(timer.read());
         welford(f64, .biased, &biased_mean, &biased_var, timer_read, n + 1);
     }
 
-    print("\n[[insertSort1: Use [*]T]]\n  mean = {d} ns\n  std  = {d} ns\n", .{ biased_mean, @sqrt(biased_var) });
+    print("\n[[insertSort1: Use [*]T (guarded)]]\n  mean = {d} ns\n  std  = {d} ns\n", .{ biased_mean, @sqrt(biased_var) });
+    print("  eval = {any}\n", .{itmax});
+
+    // test "benchmark insertSort1 (unguarded)"
+    // [[insertSort1: Use [*]T (unguarded)]]
+    //   mean = 53.559538000000295 ns
+    //   std  = 201.23443066539588 ns
+    //   eval = 1000000
+
+    for (0..itmax) |n| {
+        inline for (arr, .{ 15, 7, 8, 1, 4, 6, 1, 2, 13, 5, 5, 14, 8, 5, 10, 13 }) |*ptr, val| ptr.* = val;
+        timer.reset();
+        insertSort1(u64, .unguarded, arr.ptr, arr.ptr + 15);
+        timer_read = @floatFromInt(timer.read());
+        welford(f64, .biased, &biased_mean, &biased_var, timer_read, n + 1);
+    }
+
+    print("\n[[insertSort1: Use [*]T (unguarded)]]\n  mean = {d} ns\n  std  = {d} ns\n", .{ biased_mean, @sqrt(biased_var) });
     print("  eval = {any}\n", .{itmax});
 
     // test "benchmark insertSort2"
     // [[insertSort2: Use *T]]
-    // mean = 65.13845099999682 ns
-    // std  = 248.79378138997197 ns
-    // eval = 1000000
+    //   mean = 70.47612999999905 ns
+    //   std  = 346.7120770758258 ns
+    //   eval = 1000000
+
     for (0..itmax) |n| {
         inline for (arr, .{ 15, 7, 8, 1, 4, 6, 1, 2, 13, 5, 5, 14, 8, 5, 10, 13 }) |*ptr, val| ptr.* = val;
         timer.reset();
